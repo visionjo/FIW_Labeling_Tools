@@ -143,10 +143,16 @@ for x = 1:nfids
 
     model = FIW.model_mids(feats, labs_tr, svm);
     clear feats;
+    % eval model on training data
+    [~,topscorer] = max(model.tr_scores);
+    correct = str2num(cell2mat(cellfun(@(x) x (4:end),labs_tr,'uni',false))) == topscorer';
+    per_correct = (length(find(correct(:)==1))/ length(correct)) * 100;
+    disp([num2str(per_correct) '% correct testing SVMs on training data']);
+    
     
     %% Get scores for SVMs
     fpaths = f_unlabfeats(strcmp(unlabs_gt,fids{x}));
-    un_feats = load_features(FT.fpath);
+    un_feats = load_features(FT.fpath(FT.Confidence == 0));
            
     scores = model.w' * un_feats + model.b * ones(1,size(un_feats,2));
     [topscore,topscorer]=max(scores);
@@ -154,6 +160,24 @@ for x = 1:nfids
     inds = find(FT.label);
     high_confidence = FT.label(inds) == topscorer(inds)';
     FT.Confidence(inds(high_confidence)) = 1;
+    
+    
+    %% update SVM models
+    ids = find(FT.Confidence);
+    fpaths = cat(1,fpaths_tr, FT.fpath(ids));
+    labs  = cat(1,labs_tr, FT.label(ids));
+    feats = load_features(fpaths);
+    
+    model = FIW.model_mids(feats, labs, svm);
+      
+    [~,topscorer] = max(model.tr_scores);
+    correct = str2num(cell2mat(cellfun(@(x) x (4:end),labs,'uni',false))) == topscorer';
+    per_correct = (length(find(correct(:)==1))/ length(correct)) * 100;
+    disp([num2str(per_correct) '% correct testing SVMs on training data']);
+    
+    
+    %% Process each PID
+    FT = FIW.process_pids(FT);
     
     
 end
