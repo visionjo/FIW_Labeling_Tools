@@ -26,6 +26,12 @@ if exist(vl_path)
     run(vl_path);
 end
 
+% model parameters
+svm.biasMultiplier = 1 ;
+svm.C = 1 ;
+svm.solver = 'sdca';
+
+
 d_source_root = '/home/jrobby/Dropbox/Families_In_The_Wild/Database/New_PIDs/';%/home/jrobby/Dropbox/Families_In_The_Wild/Journal_Extension/data/';
 % d_source_root = '/Users/jrob/WORK/janus/sandbox/jrobinson/Agglomerative/matlab/data/New_PIDs/';
 imdir = [d_source_root 'unlabeled/faces/'];
@@ -43,16 +49,21 @@ nfids = length(fids);
 
 
 
- 
-% Parse metadata
-% Reference family information to determine members whom are present in 
-% collection of unlabeled images.
 % fid_path = '/home/jrobby/Dropbox/Families_In_The_Wild/Ann/FW_FIDs/';
 obin = strcat(d_source_root, 'unlabeled/FIDs/',fids,'/');
 cellfun(@mkdir,obin)
 fid_paths = strcat(fin_labs,fids,'.csv');
 fam_info = cellfun(@exist,  fid_paths) > 0; % families with existing labels
 
+% get featpaths for unlabeled faces
+tt=dir([fin_unlabfeats '*/*/*.mat']);
+tmp = strcat({tt.folder},'/'); tmp1 = {tt.name};
+f_unlabfeats = strcat(tmp,tmp1)';
+% imset = imageSet('data/New_PIDs/unlabeled/faces/','recursive');
+% f_unlabfeats = strrep(strrep([imset.ImageLocation]','faces','features'),'.jpg','.mat');
+
+sind = length(strcat(d_source_root, 'unlabeled/features/'));
+unlabs_gt = cellfun(@(x) x(sind+1:sind+5), f_unlabfeats,'uni',false);
 
 %% Prepare KNOWN
 %% get featpaths for labeled faces
@@ -80,15 +91,7 @@ f_labfeats = strcat(tmp,tmp1)';
 sind = length(strcat(d_source_root, 'labeled/features/'));
 labs_gt = cellfun(@(x) x(sind+1:sind+5), f_labfeats,'uni',false);
 
-%% get featpaths for unlabeled faces
-tt=dir([fin_unlabfeats '*/*/*.mat']);
-tmp = strcat({tt.folder},'/'); tmp1 = {tt.name};
-f_unlabfeats = strcat(tmp,tmp1)';
-% imset = imageSet('data/New_PIDs/unlabeled/faces/','recursive');
-% f_unlabfeats = strrep(strrep([imset.ImageLocation]','faces','features'),'.jpg','.mat');
 
-sind = length(strcat(d_source_root, 'unlabeled/features/'));
-unlabs_gt = cellfun(@(x) x(sind+1:sind+5), f_unlabfeats,'uni',false);
 
 
 for x = 1:nfids
@@ -121,6 +124,8 @@ for x = 1:nfids
     system(cmd);
     
     allnames = myToolbox.i_o.csv2cell(f_names, 'fromfile');
+    % Reference family information to determine members whom are present in
+    % collection of unlabeled images.
     allnames = unique(allnames);
     
     %% first handle cases with single face (i.e., profile pics)
@@ -128,59 +133,23 @@ for x = 1:nfids
     
 
 
-    
-    %% Generate SVMs
-    fpaths_tr = f_labfeats(strcmp(labs_gt,fids{x}));
-    ind = strfind(fpaths_tr{1},'MID');
-    
-    labs_tr = cellfun(@fileparts,cellfun(@(x) x(ind:end),fpaths_tr ,'uni',false),'uni',false);
-    labs = unique(labs_tr);
-    nfeats = length(fpaths_tr);
-    feats = cell(1,nfeats);
-    for y = 1:nfeats
-        tmp =  load(fpaths_tr{y});
-        feats{y} = tmp.feat;
-    end
-    feats = double(cat(2,feats{:}));
-    %# train one-against-all models
-    nlabs = numel(labs);
-    model = cell(nlabs,1);
-    w = zeros(size(feats,1),nlabs);  b =zeros(1,nlabs); info=cell(1,nlabs);
-    biasMultiplier = 1 ;
-    C = 1 ;
-    lambda = 1 / (C * nlabs);
-    numiter = 50/lambda;
-    for ci = 1:nlabs
-        try
-            fprintf('Training model for class %s\n', labs{ci}) ;
-            y = 2 * strcmp(labs_tr, labs{ci}) - 1;
-            %       y(~pos_samps)=-1;
-            [w(:,ci), b(ci), info{ci}] = vl_svmtrain(feats, y, lambda, ...
-                'Solver', 'sdca', ...
-                'MaxNumIterations',numiter, ...
-                'BiasMultiplier', biasMultiplier, ...
-                'Epsilon', 1e-3);
-        catch
-            %       logger(lpath,['Error generating model for ' tags{ci}])
-            display('Error modeling SVM');
-        end
-    end
+    %% Model known members
+    % load face features 
+    fpaths_tr = f_labfeats(strcmp(labs_gt,fids{x}));  
+    feats = load_features(fpaths_tr);
 
+    % train one-against-all models
+    % Generate SVMs
+    ind = strfind(fpaths_tr{1},'MID');
+    labs_tr = cellfun(@fileparts,cellfun(@(x) x(ind:end),fpaths_tr ,'uni',false),'uni',false);
+
+    [w, b, info, labs] = FIW.model_mids(feats, labs_tr, svm);
+    
     
     %% Get scores for SVMs
     fpaths = f_unlabfeats(strcmp(unlabs_gt,fids{x}));
-%     ind = strfind(fpaths{1},'MID');
-    
-%     labs_tr = cellfun(@fileparts,cellfun(@(x) x(ind:end),fpaths_tr ,'uni',false),'uni',false);
-%     labs = unique(labs_tr);
-    nfeats = length(fpaths);
-    feats = cell(1,nfeats);
-    for y = 1:nfeats
-        tmp =  load(fpaths{y});
-        feats{y} = tmp.feat;
-    end
-    feats = double(cat(2,feats{:}))';
-    
+    un_feats = load_features(FT.fpath);
+       
     %# get probability estimates of test instances using each model
 %     prob = zeros(nfeats,nlabs);
 %     for k=1:nlabs
@@ -202,6 +171,11 @@ for x = 1:nfids
 %     Member(name,id,fid,gender, featpaths)
     
 end
+
+
+end
+
+
 
 
 
