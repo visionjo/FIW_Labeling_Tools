@@ -1,3 +1,4 @@
+function main()
 %% Description of system and components involved in semi-automatic data labeling for FIW.
 % The purpose of this file is to abstract the workflow of semi-supervised
 % labeling of family photos. In a nutshell, the program is founded on two
@@ -10,6 +11,7 @@
 % and facial samples are used to filter noisy metadata and compare face
 % encodings, respectfully.--
 %% Temporary directory for dumping intermediate results
+global tmp_bin  cmd_name_parser;
 tmp_bin = '/home/jrobby/Documents/janus/sandbox/jrobinson/Agglomerative/matlab/tmp/';
 myToolbox.i_o.checkdir(tmp_bin);
 %% Name_Parser.java tool configurations
@@ -23,6 +25,7 @@ vl_path = 'vlfeat-0.9.20/toolbox/vl_setup.m';
 if exist(vl_path)
     run(vl_path);
 end
+
 d_source_root = '/home/jrobby/Dropbox/Families_In_The_Wild/Database/New_PIDs/';%/home/jrobby/Dropbox/Families_In_The_Wild/Journal_Extension/data/';
 % d_source_root = '/Users/jrob/WORK/janus/sandbox/jrobinson/Agglomerative/matlab/data/New_PIDs/';
 imdir = [d_source_root 'unlabeled/faces/'];
@@ -33,7 +36,7 @@ fin_unlabimages = [d_source_root 'unlabeled/images/'];
 fin_labs = [d_source_root 'labeled/FIDs/'];
  
 %% Prepare UNKNOWN
-%% Fetch family information, if any
+% Fetch family information, if any
 T = readtable(strcat(d_source_root,'PIDs_New_Master.csv'));
 fids = unique(T.FIDs);
 nfids = length(fids);
@@ -41,7 +44,7 @@ nfids = length(fids);
 
 
  
-%% Parse metadata
+% Parse metadata
 % Reference family information to determine members whom are present in 
 % collection of unlabeled images.
 % fid_path = '/home/jrobby/Dropbox/Families_In_The_Wild/Ann/FW_FIDs/';
@@ -51,6 +54,7 @@ fid_paths = strcat(fin_labs,fids,'.csv');
 fam_info = cellfun(@exist,  fid_paths) > 0; % families with existing labels
 
 
+%% Prepare KNOWN
 %% get featpaths for labeled faces
 tt=dir([fin_labfeats '*/*/*.mat']);
 tmp = strcat({tt.folder},'/'); tmp1 = {tt.name};
@@ -99,39 +103,31 @@ for x = 1:nfids
     meta = T.METADATA(inds);
     pids = T.PIDs(inds);
     
+    
     %% prepare table containing PIDs, metadata, image path, label, and 
     % whether or not a single face (i.e., Portait)
     FT = FIW.prepare_fid_table(imdir, fids{x}, meta);
+    nfaces = length(FT.ID);
+
+    %% expand on prior knowledge
+    % search all metadata for instances of names. Names not present in FIDs
+    % are potential candidates for new family members
+    
+    f_meta = strcat(tmp_bin,'portrait_meta.csv');
+    myToolbox.i_o.cell2csv(f_meta, meta);
+    f_names = strcat(tmp_bin,'fid_names.csv');
+    
+    cmd = [cmd_name_parser ' ' f_meta ' ' f_names];
+    system(cmd);
+    
+    allnames = myToolbox.i_o.csv2cell(f_names, 'fromfile');
+    allnames = unique(allnames);
+    
+    %% first handle cases with single face (i.e., profile pics)
+    FT = FIW.handle_portaits(FT, infos);
     
 
-    %% first handle cases with single face (i.e., profile pics)   
-    
-    %     single_face = [iset.Count] == 1;
-    %     sf_set = iset(single_face);
-    %     sf_pids = {sf_set.Description};
-    %
-    %     cmeta = cell(1,length(sf_pids));
-    %
-    %     for y = 1:length(sf_pids)
-    %         ind = strcmp(pids,sf_pids{y});
-    %         cmeta{y} = meta(ind);
-    %     end
-    
-    sf_set = find([FT.Portrait]);
-    nsingles = length(sf_set);
-    mids = zeros(nfaces,1);
-    mids2 = zeros(nsingles,1);
-    for y = 1:infos.nmembers
-        indz = strcmp([cmeta{:}],infos.name{y});
-        if isempty(find(indz, 1)), continue; end
-        pidz = sf_pids(indz);
-        for z = 1:length(pidz)
-            mids(strcmp(FT.PID,pidz{z})) = str2double(infos.mid{y});
-            mids2(strcmp(sf_pids,pidz{z}))  = str2double(infos.mid{y});
-        end
-    end
-    
-    
+
     
     %% Generate SVMs
     fpaths_tr = f_labfeats(strcmp(labs_gt,fids{x}));

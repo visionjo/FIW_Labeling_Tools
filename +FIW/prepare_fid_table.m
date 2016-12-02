@@ -12,10 +12,6 @@ function FT = prepare_fid_table(imdir, fid, meta)
 %
 %
 
-
-
-
-
 iset = imageSet(strcat(imdir,fid,'/'),'recursive');
 nfaces = sum([iset.Count]);
 ID = zeros(nfaces,1);   indx = 1;

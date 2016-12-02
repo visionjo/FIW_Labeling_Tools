@@ -6,5 +6,7 @@ info.name = contents(2:info.nmembers+1,22);
 info.gender = contents(2:info.nmembers+1,23);
 info.rel = contents(2:info.nmembers+1,2:info.nmembers+1);
 info.mid = contents(2:info.nmembers+1,1);
+
+
 end
 
