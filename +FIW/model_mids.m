@@ -1,4 +1,4 @@
-function  [w, b, info, labs] = model_mids(feats, labs_tr, params)
+function  model = model_mids(feats, labs_tr, params)
 
 
 labs = unique(labs_tr);
@@ -24,6 +24,9 @@ for ci = 1:nlabs
         display('Error modeling SVM');
     end
 end
+model.w = w; model.b = b'; model.info = info;
+model.labels = labs;
 
+model.tr_scores = w' * feats + b' * ones(1,size(feats,2));
 end
 

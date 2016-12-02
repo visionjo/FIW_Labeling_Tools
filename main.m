@@ -131,8 +131,6 @@ for x = 1:nfids
     %% first handle cases with single face (i.e., profile pics)
     FT = FIW.handle_portaits(FT, infos);
     
-
-
     %% Model known members
     % load face features 
     fpaths_tr = f_labfeats(strcmp(labs_gt,fids{x}));  
@@ -143,23 +141,25 @@ for x = 1:nfids
     ind = strfind(fpaths_tr{1},'MID');
     labs_tr = cellfun(@fileparts,cellfun(@(x) x(ind:end),fpaths_tr ,'uni',false),'uni',false);
 
-    [w, b, info, labs] = FIW.model_mids(feats, labs_tr, svm);
-    
+    model = FIW.model_mids(feats, labs_tr, svm);
+    clear feats;
     
     %% Get scores for SVMs
     fpaths = f_unlabfeats(strcmp(unlabs_gt,fids{x}));
     un_feats = load_features(FT.fpath);
-       
-    %# get probability estimates of test instances using each model
-%     prob = zeros(nfeats,nlabs);
-%     for k=1:nlabs
-%         cinds = strcmp(labs_tr,labs{k});
-% %         cinds = labs_tr==k;        
-%         [~,~,p] = svmpredict(double(cinds), feats, model{k}, '-b 1');
-%         prob(:,k) = p(:,model{k}.Label==1);    %# probability of class==k
-%     end
+           
+    scores = model.w' * un_feats + model.b * ones(1,size(un_feats,2));
+    [topscore,topscorer]=max(scores);
+    
+    inds = find(FT.label);
+    high_confidence = FT.label(inds) == topscorer(inds)';
+    FT.Confidence(inds(high_confidence)) = 1;
     
     
+end
+
+
+end
 
 %     labs_ne = find(strcmp(labs_gt,fids{x})==0);
 %     
@@ -170,12 +170,6 @@ for x = 1:nfids
 %     fclose(fid);
 %     Member(name,id,fid,gender, featpaths)
     
-end
-
-
-end
-
-
 
 
 
