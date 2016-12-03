@@ -131,11 +131,11 @@ for x = 1:nfids
     if isempty(check)
         fprintf(2, ...
             '\nError parsing surname: FID listing does not contain period as demiliter\n');
-          infos.surname = fid_listing;
+          infos.surname = lower(fid_listing);
         fprintf(2, ...
             'Assigning complete listing as surname:\t%s\n\n',surname);
     else
-        infos.surname = tmp{1};
+        infos.surname = lower(tmp{1});
     end
         
     %% prepare table containing PIDs, metadata, image path, label, and 
@@ -149,12 +149,9 @@ for x = 1:nfids
     allnames = find_candidate_names(cmd_name_parser, meta, tmp_bin);
     
     [names_lut, new_names] = FIW.create_names_lut( infos, allnames);
-    
-    
-    
-    
+       
     %% first handle cases with single face (i.e., profile pics)
-    FT = FIW.handle_portaits(FT, infos);
+    FT = FIW.handle_portaits(FT, infos, names_lut);
     
     %% get attribute features for unknown facial images
     FIW.prepare_facial_attributes(attributes,  FT.ipath, strcat(attributes.featbin,fids{x},'/'));

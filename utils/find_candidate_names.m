@@ -24,4 +24,4 @@ system(cmd);
 allnames = myToolbox.i_o.csv2cell(f_names, 'fromfile');
 % Reference family information to determine members whom are present in
 % collection of unlabeled images.
-allnames = unique(allnames);
+allnames = lower(unique(allnames));

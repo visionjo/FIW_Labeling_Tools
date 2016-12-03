@@ -18,7 +18,7 @@ nfaces = length(FT.ID);
 sf_set = find([FT.Portrait]);
 sf_pids = FT.PID(sf_set);
 nsingles = length(sf_set);
-cmeta = FT.Metadata(FT.Portrait==1);
+cmeta = lower(FT.Metadata(FT.Portrait==1));
 mids = cell(nfaces,1);
 midsarray = zeros(nfaces,1);
 mids2 = zeros(nsingles,1);
