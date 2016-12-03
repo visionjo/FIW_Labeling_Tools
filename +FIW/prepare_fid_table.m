@@ -1,4 +1,4 @@
-function FT = prepare_fid_table(imdir, fid, meta)
+function FT = prepare_fid_table(imdir, fid, meta, pids)
 %%
 %
 %   AUTHOR    : Joseph P. Robinson
@@ -26,16 +26,20 @@ for y = 1:length(iset)
     indz = indx:uplimit;
     ID(indz) = y;
     indx = uplimit + 1;
+    
+    pid_ids = find(strcmp(pids,iset(y).Description));
     for z = 1:iset(y).Count
         cPIDs{indt} = iset(y).Description;
-        fid_meta{indt} = meta{y};
+        fid_meta{indt} = meta{pid_ids};
         single_face(indt) = iset(y).Count;
         indt = indt + 1;
     end
+    
 end
 single_face(single_face ~= 1) = 0;
 
-FT = table(ID,...
+FT = table(transpose(1:nfaces),...
+    ID,...
     cell(nfaces,1), ...%     zeros(nfaces,1), ...
     zeros(nfaces,1), ...
     single_face,...
@@ -43,6 +47,6 @@ FT = table(ID,...
     fid_meta,...
     [iset.ImageLocation]',... image paths
     strrep(strrep([iset.ImageLocation]','faces','features'),'.jpg','.mat'), ... feature paths
-    'VariableNames',{'ID' 'label' 'Confidence' 'Portrait' 'PID' 'Metadata' 'ipath' 'fpath'});
+    'VariableNames',{'FaceID' 'ID' 'label' 'Confidence' 'Portrait' 'PID' 'Metadata' 'ipath' 'fpath'});
 
 FT.label = repmat(string(''),length(FT.label),1);

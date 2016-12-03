@@ -1,4 +1,4 @@
-function main()
+% function main()
 %% Description of system and components involved in semi-automatic data labeling for FIW.
 % The purpose of this file is to abstract the workflow of semi-supervised
 % labeling of family photos. In a nutshell, the program is founded on two
@@ -11,7 +11,8 @@ function main()
 % and facial samples are used to filter noisy metadata and compare face
 % encodings, respectfully.--
 %% Temporary directory for dumping intermediate results
-global tmp_bin  cmd_name_parser;
+% global tmp_bin  cmd_name_parser;
+
 tmp_bin = '/home/jrobby/Documents/janus/sandbox/jrobinson/Agglomerative/matlab/tmp/';
 myToolbox.i_o.checkdir(tmp_bin);
 %% Name_Parser.java tool configurations
@@ -41,6 +42,24 @@ fin_unlabfeats = [d_source_root 'unlabeled/features/'];
 fin_unlabimages = [d_source_root 'unlabeled/images/'];
 fin_labs = [d_source_root 'labeled/FIDs/'];
  
+%% Attributes models fpaths
+attributes.featbin = 'info/attributes/';
+myToolbox.i_o.checkdir(attributes.featbin);
+attributes.d_model_age = '/home/jrobby/caffe/models/cnn_age_gender/';
+attributes.f_mean = [attributes.d_model_age 'mean.mat'];
+
+attributes.cropped_dim = 227;
+attributes.image_dim = 256;
+attributes.batch_size = 1;
+
+attributes.f_age_net = [attributes.d_model_age 'deploy_age.prototxt'];
+attributes.f_age_weights = [attributes.d_model_age 'age_net.caffemodel'];
+
+attributes.d_model_gender = attributes.d_model_age;
+attributes.f_gender_net = [attributes.d_model_age 'deploy_gender.prototxt'];
+attributes.f_gender_weights = [attributes.d_model_age 'gender_net.caffemodel'];
+
+
 %% Prepare UNKNOWN
 % Fetch family information, if any
 T = readtable(strcat(d_source_root,'PIDs_New_Master.csv'));
@@ -109,7 +128,7 @@ for x = 1:nfids
     
     %% prepare table containing PIDs, metadata, image path, label, and 
     % whether or not a single face (i.e., Portait)
-    FT = FIW.prepare_fid_table(imdir, fids{x}, meta);
+    FT = FIW.prepare_fid_table(imdir, fids{x}, meta, pids);
     nfaces = length(FT.ID);
 
     %% expand on prior knowledge
@@ -130,6 +149,11 @@ for x = 1:nfids
     
     %% first handle cases with single face (i.e., profile pics)
     FT = FIW.handle_portaits(FT, infos);
+    
+    %% get attribute features for unknown facial images
+    FIW.prepare_facial_attributes(attributes,  FT.ipath, strcat(attributes.featbin,fids{x},'/'));
+
+    
     
     %% Model known members
     % load face features 
@@ -183,7 +207,7 @@ for x = 1:nfids
 end
 
 
-end
+% end
 
 %     labs_ne = find(strcmp(labs_gt,fids{x})==0);
 %     
