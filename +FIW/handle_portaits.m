@@ -11,7 +11,7 @@ function FT = handle_portaits(FT, infos, name_lut)
 %   FILENAME  : prepare_fid_table.m
 %
 %   REVISIONS:
-%   15-December-2016 -   Function created
+%   1-December-2016 -   Function created
 %
 %
 nfaces = length(FT.ID);

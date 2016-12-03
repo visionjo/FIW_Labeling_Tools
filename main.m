@@ -131,11 +131,11 @@ for x = 1:nfids
     if isempty(check)
         fprintf(2, ...
             '\nError parsing surname: FID listing does not contain period as demiliter\n');
-          surname = fid_listing;
+          infos.surname = fid_listing;
         fprintf(2, ...
             'Assigning complete listing as surname:\t%s\n\n',surname);
     else
-        surname = tmp{1};
+        infos.surname = tmp{1};
     end
         
     %% prepare table containing PIDs, metadata, image path, label, and 
@@ -147,30 +147,9 @@ for x = 1:nfids
     % search all metadata for instances of names. Names not present in FIDs
     % are potential candidates for new family members
     allnames = find_candidate_names(cmd_name_parser, meta, tmp_bin);
-    names = create_names_lut(allnames, infos.name);
     
-    new_mids = ones(length(allnames),1);
-    names_lut = [];
-    for y = 1:infos.nmembers
-        names_lut(y).list{1} = infos.name{y};
-        
-        % determine whether or not last name is included in name listing
-        tmp_ids = strfind(infos.name{y},surname);
-        if isempty(tmp_ids)
-            % doesnt include last name
-            names_lut(y).list{2} = [infos.name{y} ' ' surname];
-        else
-            % name listing includes lastname; therefore, add instance
-            % without it
-            names_lut(y).list{2} = strtok(infos.name{y});
-        end
-        
-        
-        tmp_ids = find(strcmp(infos.name(y),allnames));        
-        if ~isempty(tmp_ids), new_mids(tmp_ids) = 0; end
-        
-    end
-    new_names = allnames(new_mids==1);
+    [names_lut, new_names] = FIW.create_names_lut( infos, allnames);
+    
     
     
     
