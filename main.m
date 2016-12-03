@@ -59,7 +59,8 @@ attributes.d_model_gender = attributes.d_model_age;
 attributes.f_gender_net = [attributes.d_model_age 'deploy_gender.prototxt'];
 attributes.f_gender_weights = [attributes.d_model_age 'gender_net.caffemodel'];
 
-
+%% FID LUT
+TFID = readtable(strcat(d_source_root,'FIW_FIDs.csv'));
 %% Prepare UNKNOWN
 % Fetch family information, if any
 T = readtable(strcat(d_source_root,'PIDs_New_Master.csv'));
@@ -125,7 +126,18 @@ for x = 1:nfids
     meta = T.METADATA(inds);
     pids = T.PIDs(inds);
     
-    
+    fid_listing = TFID.surnames{strcmp(TFID.FIDs,fids{x})};
+    [tmp, check] = split(fid_listing,'.');
+    if isempty(check)
+        fprintf(2, ...
+            '\nError parsing surname: FID listing does not contain period as demiliter\n');
+          surname = fid_listing;
+        fprintf(2, ...
+            'Assigning complete listing as surname:\t%s\n\n',surname);
+    else
+        surname = tmp{1};
+    end
+        
     %% prepare table containing PIDs, metadata, image path, label, and 
     % whether or not a single face (i.e., Portait)
     FT = FIW.prepare_fid_table(imdir, fids{x}, meta, pids);
@@ -134,18 +146,33 @@ for x = 1:nfids
     %% expand on prior knowledge
     % search all metadata for instances of names. Names not present in FIDs
     % are potential candidates for new family members
+    allnames = find_candidate_names(cmd_name_parser, meta, tmp_bin);
+    names = create_names_lut(allnames, infos.name);
     
-    f_meta = strcat(tmp_bin,'portrait_meta.csv');
-    myToolbox.i_o.cell2csv(f_meta, meta);
-    f_names = strcat(tmp_bin,'fid_names.csv');
+    new_mids = ones(length(allnames),1);
+    names_lut = [];
+    for y = 1:infos.nmembers
+        names_lut(y).list{1} = infos.name{y};
+        
+        % determine whether or not last name is included in name listing
+        tmp_ids = strfind(infos.name{y},surname);
+        if isempty(tmp_ids)
+            % doesnt include last name
+            names_lut(y).list{2} = [infos.name{y} ' ' surname];
+        else
+            % name listing includes lastname; therefore, add instance
+            % without it
+            names_lut(y).list{2} = strtok(infos.name{y});
+        end
+        
+        
+        tmp_ids = find(strcmp(infos.name(y),allnames));        
+        if ~isempty(tmp_ids), new_mids(tmp_ids) = 0; end
+        
+    end
+    new_names = allnames(new_mids==1);
     
-    cmd = [cmd_name_parser ' ' f_meta ' ' f_names];
-    system(cmd);
     
-    allnames = myToolbox.i_o.csv2cell(f_names, 'fromfile');
-    % Reference family information to determine members whom are present in
-    % collection of unlabeled images.
-    allnames = unique(allnames);
     
     %% first handle cases with single face (i.e., profile pics)
     FT = FIW.handle_portaits(FT, infos);
