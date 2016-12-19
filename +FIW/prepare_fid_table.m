@@ -27,7 +27,7 @@ for y = 1:length(iset)
     ID(indz) = y;
     indx = uplimit + 1;
     
-    pid_ids = find(strcmp(pids,iset(y).Description));
+    pid_ids = strcmp(pids,iset(y).Description);
     for z = 1:iset(y).Count
         cPIDs{indt} = iset(y).Description;
         fid_meta{indt} = meta{pid_ids};

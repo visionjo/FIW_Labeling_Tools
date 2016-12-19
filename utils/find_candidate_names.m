@@ -22,6 +22,8 @@ cmd = [cmd ' ' f_meta ' ' f_names];
 system(cmd);
 
 allnames = myToolbox.i_o.csv2cell(f_names, 'fromfile');
+% remove empty elements of cell array 
+allnames = allnames(cellfun(@isempty,allnames)==0);
 % Reference family information to determine members whom are present in
 % collection of unlabeled images.
-allnames = lower(unique(allnames));
+allnames = unique(lower(strtrim(    allnames)));
