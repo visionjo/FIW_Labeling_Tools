@@ -9,7 +9,7 @@ function varargout =  setup()
 %     DEVELOPED : 2015b
 %     FILENAME  : setup.m
 %
-dirnames = {'utils','rankorder','demo'};
+dirnames = {'utils','rankorder','demo', 'include'};
 
 warning('OFF', 'MATLAB:dispatcher:nameConflict') 
 cur_root = pwd;
