@@ -16,10 +16,10 @@ function FT = handle_portaits(FT, infos, name_lut)
 %
 
 nfaces = length(FT.ID);
-sf_set = find([FT.Portrait]);
+sf_set = find([FT.NFaces==1]);
 sf_pids = FT.PID(sf_set);
 nsingles = length(sf_set);
-cmeta = strtrim(FT.Metadata(FT.Portrait==1));
+cmeta = strtrim(FT.Metadata(FT.NFaces==1));
 cmeta = clean_text(cmeta);
 mids = cell(nfaces,1);
 midsarray = zeros(nfaces,1);
