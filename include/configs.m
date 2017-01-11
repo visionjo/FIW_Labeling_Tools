@@ -2,17 +2,17 @@ function params = configs()
 params.logbin = 'intermediate/';
 myToolbox.i_o.checkdir(params.logbin);
 
-params.tmp_bin = '/home/jrobby/Documents/janus/sandbox/jrobinson/Agglomerative/matlab/tmp/';
+params.tmp_bin = 'tmp/';
 myToolbox.i_o.checkdir(params.tmp_bin);
 
 %% Name_Parser.java tool configurations
-params.f_name_parser = '/home/jrobby/Documents/janus/sandbox/jrobinson/Agglomerative/java/Name_Parser/dist/Name_Parser.jar';
+params.f_name_parser = '3rdparty/Name_Parser/dist/Name_Parser.jar';
 params.cmd_name_parser = ['java -jar ', params.f_name_parser];
-params.f_name_classifier = '/home/jrobby/Documents/janus/sandbox/jrobinson/Agglomerative/java/Name_Parser/classifiers/english.all.3class.distsim.crf.ser.gz';
+params.f_name_classifier = '3rdparty/Name_Parser/classifiers/english.all.3class.distsim.crf.ser.gz';
 params.cmd_name_parser = [params.cmd_name_parser,' ',params.f_name_classifier];
 
-% vl_path = '~/Documents/MATLAB/vlfeat-0.9.20/toolbox/vl_setup.m';
-params.vl_path = 'vlfeat-0.9.20/toolbox/vl_setup.m';
+params.vl_path = '~/Documents/MATLAB/vlfeat-0.9.20/toolbox/vl_setup.m';
+% params.vl_path = 'vlfeat-0.9.20/toolbox/vl_setup.m';
 if exist(params.vl_path)
     run(params.vl_path);
 end
@@ -23,7 +23,7 @@ params.svm.C = 1 ;
 params.svm.solver = 'sdca';
 
 
-params.d_source_root = '/home/jrobby/Dropbox/Families_In_The_Wild/Database/New_PIDs/';%/home/jrobby/Dropbox/Families_In_The_Wild/Journal_Extension/data/';
+params.d_source_root = '/Users/jrob/Desktop/kinship/FIW_Labeling_Tools/data/New_PIDs/';%/home/jrobby/Dropbox/Families_In_The_Wild/Journal_Extension/data/';
 % d_source_root = '/Users/jrob/WORK/janus/sandbox/jrobinson/Agglomerative/matlab/data/New_PIDs/';
 params.imdir = [params.d_source_root 'unlabeled/faces/'];
 

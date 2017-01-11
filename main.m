@@ -12,7 +12,20 @@ function main()
 % encodings, respectfully.--
 %% Temporary directory for dumping intermediate results
 % global tmp_bin  cmd_name_parser;
-fiw_setup
+do_modeling = false;
+do_baseline = false;
+d_baselines = 'results/cluster_ids/baseline/';
+d_names = 'results/ner/names/';
+
+
+do_multi_face = false;  % process evidence of PIDs w multiple faces (non-portrait)
+k = 7;
+lamda = 1e3;
+if(do_baseline)
+    myToolbox.i_o.checkdir(d_baselines);
+end
+myToolbox.i_o.checkdir(d_names);
+setup
 params = configs();
 %% FID LUT
 TFID = readtable(strcat(params.d_source_root,'FIW_FIDs.csv'));
@@ -22,12 +35,14 @@ T = readtable(strcat(params.d_source_root,'PIDs_New_Master.csv'));
 fids = unique(T.FIDs);
 nfids = length(fids);
 % fid_path = '/home/jrobby/Dropbox/Families_In_The_Wild/Ann/FW_FIDs/';
+% fids = cellfun(@(x) sprintf('F%04d',x),fids,'uni',false);
 obin = strcat(params.d_source_root, 'unlabeled/FIDs/',fids,'/');
 cellfun(@mkdir,obin)
 fid_paths = strcat(params.fin_labs,fids,'.csv');
 fam_info = cellfun(@exist,  fid_paths) > 0; % families with existing labels
 % get featpaths for unlabeled faces
 tt=dir([params.fin_unlabfeats '*/*/*.mat']);
+% tmp = strcat({tt},'/'); tmp1 = cellfun(@(x) x(find(x == '/',1,'last'):end),'uni',false) {tt.name};
 tmp = strcat({tt.folder},'/'); tmp1 = {tt.name};
 f_unlabfeats = strcat(tmp,tmp1)';
 % imset = imageSet('data/New_PIDs/unlabeled/faces/','recursive');
@@ -57,7 +72,17 @@ f_labfeats = strcat(tmp,tmp1)';
 sind = length(strcat(params.d_source_root, 'labeled/features/'));
 labs_gt = cellfun(@(x) x(sind+1:sind+5), f_labfeats,'uni',false);
 
-for x = 37% 1:nfids
+mid_gt = cellfun(@(x) x(sind+6:find(x=='/',1,'last')), f_labfeats,'uni',false);
+imid_gt = cellfun(@(x) x(5:end-1), mid_gt,'uni',false);
+
+%% global label- label value to distinguish from all data (i.e., FID.MID)
+g_label = strcat(labs_gt,imid_gt);
+
+% vlabs = {};%(1,nfids);
+%
+% unlabss = [];
+% f_paths={};
+for x = 1:nfids
     %% For each family
     
     if fam_info(x)
@@ -79,7 +104,7 @@ for x = 37% 1:nfids
             '\nError parsing surname: FID listing does not contain period as demiliter\n');
         infos.surname = lower(fid_listing);
         fprintf(2, ...
-            'Assigning complete listing as surname:\t%s\n\n',surname);
+            'Assigning complete listing as surname:\t%s\n\n',infos.surname);
     else
         infos.surname = lower(tmp{1});
     end
@@ -91,96 +116,204 @@ for x = 37% 1:nfids
     %% expand on prior knowledge
     % search all metadata for instances of names. Names not present in FIDs
     % are potential candidates for new family members
-    allnames = find_candidate_names(params.cmd_name_parser, meta, params.tmp_bin);
     
-    [names_lut, new_names] = FIW.create_names_lut( infos, allnames);
+    fout = strcat(d_names, fids{x},'.mat');
+    
+    if ~exist(fout,'file')
+        allnames = find_candidate_names(params.cmd_name_parser, meta, params.tmp_bin);
+        [names_lut, new_names] = FIW.create_names_lut( infos, allnames);
+        save(fout,'names_lut','new_names');
+        %         myToolbox.i_o.cell2csv(fout,cat(1,cat(2,names_lut.list)',new_names));
+    else
+        load(fout);
+        if strcmp(fids{x},'F0009')
+            names_lut(1).list{3} = 'gronk';
+            names_lut(end-2).list{3} = 'gordon';
+            names_lut(end-2).list{4} = 'gordon gronkowski';
+        end
+        %         names_lut = myToolbox.i_o.csv2cell(fout,'fromfile');
+    end
+    
+    %% determine No. names per metatext. Also, one-hot (Y) (nnames)x(nmeta)
+    [FT, Y] = FIW.count_names(FT, names_lut);
     
     %% first handle cases with single face (i.e., profile pics)
     FT = FIW.handle_portaits(FT, infos, names_lut);
     
+    %% vector containing class labels for known (0's at indices of unknown)
+    lab_vec = FIW.init_label_matrix(FT);
+    
+    l_names = cat(2,names_lut.list);
+%     findnames ();
     
     %% Model known members
     % First model existing MIDs as one-vs-rest SVMs
     % load face features
     fpaths_tr = f_labfeats(strcmp(labs_gt,fids{x}));
-    feats = load_features(fpaths_tr);
     
-    % train one-against-all models
-    % Generate SVMs
-    ind = strfind(fpaths_tr{1},'MID');
-    labs_tr = cellfun(@fileparts,cellfun(@(x) x(ind:end),fpaths_tr ,'uni',false),'uni',false);
+    %% get known labels
+    if ~isempty(fpaths_tr)
+        ind = strfind(fpaths_tr{1},'MID');
+        labs_tr = cellfun(@fileparts,cellfun(@(x) x(ind:end),fpaths_tr ,'uni',false),'uni',false);
+        ilabs = char(char(cellfun(@(x) x(4:end),labs_tr,'uni',false)));
+    else
+        ilabs = [];
+    end
+    % append unkown labels to the known
     
-    model = FIW.model_mids(feats', labs_tr, params.svm);
-    clear feats;
-    save([params.logbin 'models_init.mat'],'model','labs_tr');
-    print_scores(model.tr_scores, labs_tr);
+    %     fpaths_all=cat(1,fpaths_tr,fpaths_un);
+    alllabs = [ilabs; lab_vec];
     
-
+    vlabs{x}.labs = alllabs;
+    
+    
+    if do_modeling
+        %% Generate SVMs
+        % train one-against-all models
+        
+        feats = load_features(fpaths_tr);
+        model = FIW.model_mids(feats', labs_tr, params.svm);
+        %         clear feats;
+        save([params.logbin 'models_init.mat'],'model','labs_tr');
+        print_scores(model.tr_scores, labs_tr);
+    end
     
     
     %% Get scores for SVMs
-    fpaths = f_unlabfeats(strcmp(unlabs_gt,fids{x}));
-    un_feats = load_features(fpaths)';%FT.fpath(FT.Confidence == 0)
+    %     fpaths_un = f_unlabfeats(strcmp(unlabs_gt,fids{x}));
+    fpaths_un = FT.fpath;%f_unlabfeats(strcmp(unlabs_gt,fids{x}));
+    fpaths_all=cat(1,fpaths_tr,fpaths_un);
+    vlabs{x}.paths = fpaths_all;
     
-    scores = model.w' * un_feats + model.b * ones(1,size(un_feats,2));
-    [topscore,topscorer]=max(scores);
-    save([params.logbin 'initial_svm_scores.mat'],'topscore','topscorer','scores');
-    
-    
-    
-    %% update SVM models
-    ids = find(FT.Confidence);
-    fpaths = cat(1,fpaths_tr, FT.fpath(ids));
-    labs  = cat(1,labs_tr, FT.label(ids));
-    feats = load_features(fpaths);
-    
-    model = FIW.model_mids(feats', labs, params.svm);
-    save([params.logbin 'models_update_portait.mat'],'model','labs');
+    if (do_baseline)
+        fout = strcat(d_baselines, fids{x},'.mat');
+        generate_baselines(fpaths_all, alllabs, k, lamda, fout);
+        %     allfeats = cat(2,feats, un_feats);
+    end
+    if (do_modeling)
+        un_feats = load_features(fpaths_un);%FT.fpath(FT.Confidence == 0)
+        scores = model.w' * un_feats + model.b * ones(1,size(un_feats,2));
+        [topscore,topscorer]=max(scores);
+        save([params.logbin 'initial_svm_scores.mat'],'topscore','topscorer','scores');
         
+        
+        
+        %% update SVM models
+        ids = find(FT.Confidence);
+        fpaths = cat(1,fpaths_tr, FT.fpath(ids));
+        labs  = cat(1,labs_tr, FT.label(ids));
+        feats = load_features(fpaths);
+        
+        model = FIW.model_mids(feats', labs, params.svm);
+        save([params.logbin 'models_update_portait.mat'],'model','labs');
+        
+        print_scores(model.tr_scores, labs, [params.logbin 'initial_svm_scores.mat'])
+    end
     
+    
+    %%Pairs of faces
    
+    cases = unique([FT.NNames(FT.NNames>1); FT.NFaces(FT.NFaces>1)]);
     
-    print_scores(model.tr_scores, labs, [params.logbin 'initial_svm_scores.mat'])
-    
-%     [~,topscorer] = max();
-%     correct = str2num(cell2mat(cellfun(@(x) x (4:end),labs_tr,'uni',false))) == topscorer';
-%     per_correct = (length(find(correct(:)==1))/ length(correct)) * 100;
-%     disp([num2str(per_correct) '% correct testing SVMs on training data']);
+    for y = 1:length(cases)
+        ids = (FT.NNames == cases(y)) & (FT.NFaces == cases(y));
+        pids = find(ids);
+        onehot = Y(:,pids)';
+        
+%         
+%         onehot = zeros(1,nnames);
+%         onehot(:,Y(:,ids)) = 1;
+        nmembers = size(Y,1);
+        scores = zeros(length(onehot),nmembers);
+        for r = 1:size(Y,2)
+            cpids= onehot(y,:);
+            cmids = find(cpids);   
+            cfeats=un_feats(cmids,:);
+         
+         scores = model.w(cmids)' * cfeats + model.b(cmids) * ones(1,size(cfeats,2))
 
+%             scores = model.w(cmids)' * un_feats(cmids,:) + model.b(cmids) * ones(1,size(un_feats(pids(cpids==1),:),2))
+        end
+        
+    end
+    ids = (FT.NNames == 2) & (FT.NFaces == 2);
+    
+    
+    
+    freq=hist(FT.ID,1:length(unique(FT.ID)));
+    ids = find(freq == 2);
+    npics = length(ids);
+    cmeta = cell(2,npics/2);
+    for y = 1:npics
+        pmeta = FT.Metadata(ids(y) == FT.ID);
+        cmeta{y} = lower(pmeta{1});
+        
+        check_name_lut(cmeta{y},names_lut);
+        
+        nnames = length(names_lut);
+        onehot = zeros(1,infos(x).nmembers);
+        for z = 1:nnames
+            % for all individuals in family
+           cnames = names_lut(z).list;
+           nperms = length(cnames);
+           for r = 1:nperms
+              % for each spelling of current person's name 
+              tmp = findstr(lower(cmeta{y}),l_names{z});
+              if ~isempty(tmp)
+                  onehot(z) = 1;
+              end
+           end
+           
+        end
+        
+        
+    end
+    
+    
+    
+    %     [~,topscorer] = max();
+    %     correct = str2num(cell2mat(cellfun(@(x) x (4:end),labs_tr,'uni',false))) == topscorer';
+    %     per_correct = (length(find(correct(:)==1))/ length(correct)) * 100;
+    %     disp([num2str(per_correct) '% correct testing SVMs on training data']);
+    
     %% Get updated scores for unlabeled face encodings
-    unlab_ids = find(FT.Confidence==0);
+    unlab_ids = FT.Confidence==0;
     fpaths = f_unlabfeats(strcmp(unlabs_gt,fids{x}));
     fpaths=fpaths(unlab_ids);
-    un_feats = load_features(fpaths)';%FT.fpath(FT.Confidence == 0)
     
-    scores = model.w' * un_feats + model.b * ones(1,size(un_feats,2));
-    [topscore,topscorer]=max(scores);
-    save([params.logbin 'initial_svm_scores.mat'],'topscore','topscorer','scores');     
+    if (do_modeling)
+        un_feats = load_features(fpaths)';%FT.fpath(FT.Confidence == 0)
+        
+        scores = model.w' * un_feats + model.b * ones(1,size(un_feats,2));
+        [topscore,topscorer]=max(scores);
+        save([params.logbin 'initial_svm_scores.mat'],'topscore','topscorer','scores');
+    end
     
-     pid_list = FT.PID(find(FT.Confidence==0));
-     pids = unique(pid_list);
-     npids = length(pids);
-     
-     pointer = 1;
-     %% Process each PID
-     for y = 1:npids
-         pid = pids{y};
-         
-         cind = strcmp(FT.PID,pid);
-         c_nfaces = find(cind);
-         cmeta = cell2mat( unique(FT.Metadata(cind)));
-         
-         
-         
-         fileID = fopen('info/tmp/cmeta.txt','w');
-         fprintf(fileID,'%s',cmeta);
-         fclose(fileID);
-         
-         cmd = [params.cmd_name_parser ' ' 'info/tmp/cmeta.txt info/tmp/cmeta_names.csv'];
-         
-         cnames = myToolbox.i_o.csv2cell('info/tmp/cmeta_names.csv', 'fromfile');
-         if ~isempty(cnames)
-             nnames = length(cnames);
+    if ~(do_multi_face), continue;end
+    pid_list = FT.PID(FT.Confidence==0);
+    pids = unique(pid_list);
+    npids = length(pids);
+    
+    pointer = 1;
+    %% Process each PID
+    for y = 1:npids
+        pid = pids{y};
+        
+        cind = strcmp(FT.PID,pid);
+        c_nfaces = find(cind);
+        cmeta = cell2mat( unique(FT.Metadata(cind)));
+        
+        
+        
+        fileID = fopen('info/tmp/cmeta.txt','w');
+        fprintf(fileID,'%s',cmeta);
+        fclose(fileID);
+        
+        cmd = [params.cmd_name_parser ' ' 'info/tmp/cmeta.txt info/tmp/cmeta_names.csv'];
+        
+        cnames = myToolbox.i_o.csv2cell('info/tmp/cmeta_names.csv', 'fromfile');
+        if ~isempty(cnames)
+            nnames = length(cnames);
             ids_names = zeros(nnames,1);
             for z = 1:nnames
                 for r = 1:length(names_lut)
@@ -197,31 +330,31 @@ for x = 37% 1:nfids
                     break;
                 end
             end
-         end
+        end
         
-         
-         if (FT.Confidence(y) < 1)
-             
-             %             FT = FIW.process_pids(FT);
-             pmeta = lower(FT.Metadata(y));
-             
-             while ~isempty(pmeta)
-                 
-                 
-             end
-             
-             
+        
+        if (FT.Confidence(y) < 1)
+            
+            %             FT = FIW.process_pids(FT);
+            pmeta = lower(FT.Metadata(y));
+            
+            while ~isempty(pmeta)
+                
+                
+            end
+            
+            
         end
     end
-%     inds = find(FT.Confidence);
-%     high_confidence = FT.label(inds) == topscorer(inds)';
-%     FT.Confidence(inds(high_confidence)) = 1;
+    %     inds = find(FT.Confidence);
+    %     high_confidence = FT.label(inds) == topscorer(inds)';
+    %     FT.Confidence(inds(high_confidence)) = 1;
+end
     
     
-
     
     
-
+    
     
     %% get attribute features for unknown facial images
     FIW.prepare_facial_attributes(attributes,  FT.ipath, strcat(attributes.featbin,fids{x},'/'));
@@ -231,7 +364,7 @@ for x = 37% 1:nfids
     
     
 end
-end
+% end
 %     labs_ne = find(strcmp(labs_gt,fids{x})==0);
 %
 %     strcmp(cat(2,cmeta{:}),'Rob');
